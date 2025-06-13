@@ -1,6 +1,7 @@
-# Debug Agent
+# Debugging Agent
 
-An AI-powered debugging assistant that helps analyze crashes and debug applications across platforms. Uses OpenAI-style completion endpoints with specialized debugging tools.
+An AI-powered debugging assistant that helps common debugging activities across platforms. Uses OpenAI-style completion endpoints with specialized debugging tools to empower the LLM to
+root cause the crash, or step through a function looking for bugs.
 
 ## Project Structure
 
