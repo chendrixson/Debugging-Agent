@@ -97,7 +97,7 @@ class LaunchApplicationTool(BaseTool):
 
 
 class AttachToProcessTool(BaseTool):
-    """Tool to attach to an existing process."""
+    """Tool to attach to an existing process or detach from current process."""
     
     @property
     def name(self) -> str:
@@ -105,49 +105,98 @@ class AttachToProcessTool(BaseTool):
     
     @property
     def description(self) -> str:
-        return "Attach the debugger to an existing running process by PID"
+        return "Attach the debugger to an existing running process by PID or detach from current process"
     
     @property
     def parameters(self) -> Dict[str, Any]:
         return {
             "type": "object",
             "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["attach", "detach"],
+                    "description": "Action to perform: attach to a process or detach from current process",
+                    "default": "attach"
+                },
                 "pid": {
                     "type": "integer",
-                    "description": "Process ID to attach to"
+                    "description": "Process ID to attach to (required when action is 'attach')"
                 }
             },
-            "required": ["pid"]
+            "required": ["action"]
         }
     
     def execute(self, **kwargs) -> ToolResult:
-        """Execute the tool to attach to a process."""
+        """Execute the tool to attach to or detach from a process."""
         try:
             self.validate_parameters(**kwargs)
             
-            pid = kwargs["pid"]
+            action = kwargs["action"]
             
-            # Attach to the process
-            success = self.debugger.attach_to_process(pid)
+            if action == "attach":
+                if "pid" not in kwargs:
+                    return ToolResult(
+                        success=False,
+                        data=None,
+                        error="PID is required when action is 'attach'",
+                        metadata={"action": "attach_to_process"}
+                    )
+                
+                pid = kwargs["pid"]
+                
+                # Attach to the process
+                success = self.debugger.attach_to_process(pid)
+                
+                if success:
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "pid": pid,
+                            "status": "attached",
+                            "debugger_state": self.debugger.get_state().value
+                        },
+                        metadata={
+                            "action": "attach_to_process",
+                            "timestamp": self._get_timestamp()
+                        }
+                    )
+                else:
+                    return ToolResult(
+                        success=False,
+                        data=None,
+                        error=f"Failed to attach to process {pid}",
+                        metadata={"action": "attach_to_process"}
+                    )
             
-            if success:
-                return ToolResult(
-                    success=True,
-                    data={
-                        "pid": pid,
-                        "status": "attached",
-                        "debugger_state": self.debugger.get_state().value
-                    },
-                    metadata={
-                        "action": "attach_to_process",
-                        "timestamp": self._get_timestamp()
-                    }
-                )
+            elif action == "detach":
+                # Detach from the current process
+                success = self.debugger.detach()
+                
+                if success:
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "status": "detached",
+                            "debugger_state": self.debugger.get_state().value
+                        },
+                        metadata={
+                            "action": "detach_from_process",
+                            "timestamp": self._get_timestamp()
+                        }
+                    )
+                else:
+                    return ToolResult(
+                        success=False,
+                        data=None,
+                        error="Failed to detach from process",
+                        metadata={"action": "detach_from_process"}
+                    )
+            
             else:
                 return ToolResult(
                     success=False,
                     data=None,
-                    error=f"Failed to attach to process {pid}",
+                    error=f"Invalid action: {action}. Must be 'attach' or 'detach'",
                     metadata={"action": "attach_to_process"}
                 )
                 
@@ -155,7 +204,7 @@ class AttachToProcessTool(BaseTool):
             return ToolResult(
                 success=False,
                 data=None,
-                error=f"Error attaching to process: {str(e)}",
+                error=f"Error with attach/detach operation: {str(e)}",
                 metadata={"action": "attach_to_process"}
             )
     

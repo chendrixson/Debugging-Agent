@@ -138,7 +138,6 @@ class GetStackTraceTool(BaseTool):
                     "line": frame.line_number,
                     "module": frame.module_name,
                     "address": frame.address,
-                    "parameters": frame.parameters
                 }
                 for frame in stack_frames
             ]

@@ -7,13 +7,13 @@ from typing import List, Tuple, Optional
 
 # Handle imports for both package and direct execution
 try:
-    from src.debugger.platform.windows import WindowsDebugger
+    from src.debugger.factory import DebuggerFactory
     from src.ai.tool_registry import ToolRegistry
     from src.ai.completion_handler import CompletionHandler
     from src.utils.config import config
     from src.utils.exceptions import DebugAgentError
 except ImportError:
-    from debugger.platform.windows import WindowsDebugger
+    from debugger.factory import DebuggerFactory
     from ai.tool_registry import ToolRegistry
     from ai.completion_handler import CompletionHandler
     from utils.config import config
@@ -24,11 +24,8 @@ class DebugAgentInterface:
     """Gradio interface for the debug agent."""
     
     def __init__(self):
-        # Initialize debugger based on platform
-        if sys.platform == "win32":
-            self.debugger = WindowsDebugger()
-        else:
-            raise DebugAgentError(f"Platform {sys.platform} not supported yet")
+        # Initialize debugger using factory
+        self.debugger = DebuggerFactory.create_debugger()
         
         # Initialize AI components
         self.tool_registry = ToolRegistry(self.debugger)

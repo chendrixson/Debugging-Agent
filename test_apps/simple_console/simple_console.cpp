@@ -1,5 +1,6 @@
 #include <iostream>
 #include <stdexcept>
+#include <Windows.h>
 
 // Null pointer dereference
 void nullPointerDereference() {
@@ -60,7 +61,27 @@ void printMenu() {
     std::cout << "5. Exit" << std::endl;
 }
 
-int main() {
+// Test mode for the automated tool test
+void runTestMode()
+{
+    OutputDebugString(L"Running automated test mode, waiting for 5s then starting.");
+    Sleep(5000);
+
+    int numbers[] = { 40, 74, 129 };
+    int size = sizeof(numbers) / sizeof(numbers[0]);
+
+    // Test should be attached to the below function, then will walk through it
+    calculateStatistics(numbers, size);
+}
+
+int main(int argc, char* argv[]) {
+    // See if this is in test mode
+    if (argc == 2 && !strcmp(argv[1], "test"))
+    {
+        runTestMode();
+        return 1;
+    }
+
     int choice;
     int numbers[] = { 1, 2, 3, 4, 5 };
     int size = sizeof(numbers) / sizeof(numbers[0]);
