@@ -64,8 +64,8 @@ void printMenu() {
 // Test mode for the automated tool test
 void runTestMode()
 {
-    OutputDebugString(L"Running automated test mode, waiting for 5s then starting.");
-    Sleep(5000);
+    OutputDebugString(L"Running automated test mode, waiting for 10s then starting.");
+    Sleep(20000);
 
     int numbers[] = { 40, 74, 129 };
     int size = sizeof(numbers) / sizeof(numbers[0]);
@@ -73,7 +73,8 @@ void runTestMode()
     // Test should be attached to the below function, then will walk through it
     calculateStatistics(numbers, size);
 
-    Sleep(2000);
+    // wait for 10s before crashing
+    Sleep(5000);
     
     // And then crash
     nullPointerDereference();

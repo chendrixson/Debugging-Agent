@@ -13,10 +13,17 @@
             "console": "integratedTerminal",
         },
         {
-            "name": "Debug Tools",
+            "name": "Debug Tool Test",
             "type": "debugpy",
             "request": "launch",
             "program": "src/test_tools.py",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "Flask Server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "run_flask_debug_agent.py",
             "console": "integratedTerminal",
         }
     ]

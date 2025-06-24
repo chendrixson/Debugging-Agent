@@ -1,4 +1,5 @@
-"""Main entry point for the Debug Agent application."""
+#!/usr/bin/env python3
+"""Flask-based Debug Agent runner script."""
 
 import sys
 import os
@@ -6,31 +7,24 @@ import argparse
 from pathlib import Path
 import logging
 
-# Add src to path for imports and parent directory for package imports
-current_dir = Path(__file__).parent
-parent_dir = current_dir.parent
-sys.path.insert(0, str(current_dir))
-sys.path.insert(0, str(parent_dir))
+# Add src to Python path
+src_path = Path(__file__).parent / "src"
+sys.path.insert(0, str(src_path))
 
-# Now we can import directly without relative imports
-try:
-    from src.ui.gradio_interface import DebugAgentInterface
-    from src.utils.config import config
-    from src.utils.exceptions import DebugAgentError
-except ImportError:
-    # Fallback for when running from different locations
-    from ui.gradio_interface import DebugAgentInterface
-    from utils.config import config
-    from utils.exceptions import DebugAgentError
-
+# Import and run Flask backend
+from backend.app import app, socketio, backend
 
 def check_prerequisites():
     """Check if required prerequisites are available."""
     errors = []
     
     # Check OpenAI API key
-    if not config.openai_api_key:
-        errors.append("OPENAI_API_KEY environment variable is required")
+    try:
+        from src.utils.config import config
+        if not config.openai_api_key:
+            errors.append("OPENAI_API_KEY environment variable is required")
+    except ImportError:
+        errors.append("Could not import configuration")
     
     # Check platform support
     if sys.platform == "win32":
@@ -43,7 +37,6 @@ def check_prerequisites():
     
     return errors
 
-
 def create_env_template():
     """Create a .env template file."""
     env_template = """# Debug Agent Configuration
@@ -53,10 +46,10 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4-turbo-preview
 
-# Gradio UI Configuration
-GRADIO_HOST=127.0.0.1
-GRADIO_PORT=7860
-GRADIO_SHARE=false
+# Flask Backend Configuration
+FLASK_HOST=127.0.0.1
+FLASK_PORT=5000
+FLASK_DEBUG=true
 
 # Debug Configuration
 DEBUG_TIMEOUT=30
@@ -75,7 +68,6 @@ WINDOWS_DEBUGGER_PATH=
         return True
     return False
 
-
 def main():
     """Main entry point."""
     logging.basicConfig(
@@ -84,7 +76,7 @@ def main():
         stream=sys.stdout
     )
     parser = argparse.ArgumentParser(
-        description="Debug Agent - AI-powered debugging assistant"
+        description="Flask-based Debug Agent - AI-powered debugging assistant"
     )
     
     parser.add_argument(
@@ -95,21 +87,21 @@ def main():
     
     parser.add_argument(
         "--host",
-        default=None,
-        help="Host to bind to (overrides GRADIO_HOST)"
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)"
     )
     
     parser.add_argument(
         "--port",
         type=int,
-        default=None,
-        help="Port to bind to (overrides GRADIO_PORT)"
+        default=5000,
+        help="Port to bind to (default: 5000)"
     )
     
     parser.add_argument(
-        "--share",
+        "--debug",
         action="store_true",
-        help="Create public Gradio link"
+        help="Enable debug mode"
     )
     
     args = parser.parse_args()
@@ -129,37 +121,28 @@ def main():
             print("\nRun with --setup to create a .env template file.")
             sys.exit(1)
         
-        print("🐛 Starting Debug Agent...")
+        print("🐛 Starting Flask-based Debug Agent...")
         print(f"Platform: {sys.platform}")
-        print(f"OpenAI Model: {config.openai_model}")
-        
-        # Override config with command line args
-        if args.host:
-            config.gradio_host = args.host
-        if args.port:
-            config.gradio_port = args.port
-        if args.share:
-            config.gradio_share = True
-        
-        # Create and launch the interface
-        interface = DebugAgentInterface()
-        
-        print(f"🚀 Launching web interface at http://{config.gradio_host}:{config.gradio_port}")
+        print(f"Backend URL: http://{args.host}:{args.port}")
+        print(f"Frontend URL: http://localhost:3000")
         print("Press Ctrl+C to stop the server")
         
-        interface.launch()
+        # Run the Flask app with SocketIO
+        socketio.run(
+            app, 
+            host=args.host, 
+            port=args.port, 
+            debug=args.debug,
+            allow_unsafe_werkzeug=True
+        )
         
     except KeyboardInterrupt:
         print("\n👋 Debug Agent stopped by user")
-    except DebugAgentError as e:
-        print(f"❌ Debug Agent Error: {e}")
-        sys.exit(1)
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main() 

@@ -46,21 +46,33 @@ class SetBreakpointTool(BaseTool):
                     "description": "Optional condition that must be true for the breakpoint to trigger"
                 }
             },
-            "required": [],
-            "oneOf": [
-                {
-                    "required": ["file_path", "line_number"]
-                },
-                {
-                    "required": ["function_name"]
-                }
-            ]
+            "required": []
         }
     
     def execute(self, **kwargs) -> ToolResult:
         """Execute breakpoint setting."""
         try:
             self.validate_parameters(**kwargs)
+            
+            # Validate that we have either file_path+line_number or function_name, but not both
+            has_file_line = "file_path" in kwargs and "line_number" in kwargs
+            has_function = "function_name" in kwargs
+            
+            if not has_file_line and not has_function:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="Must provide either file_path+line_number or function_name",
+                    metadata={"action": "set_breakpoint"}
+                )
+            
+            if has_file_line and has_function:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="Cannot provide both file_path+line_number and function_name - choose one",
+                    metadata={"action": "set_breakpoint"}
+                )
             
             # Check if debugger is in a state where we can set breakpoints
             if not self.debugger.is_attached():
@@ -74,7 +86,7 @@ class SetBreakpointTool(BaseTool):
             condition = kwargs.get("condition")
             
             # Handle function breakpoint
-            if "function_name" in kwargs:
+            if has_function:
                 function_name = kwargs["function_name"]
                 bp_id = self.debugger.set_function_breakpoint(
                     function_name=function_name,

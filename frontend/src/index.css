@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .console-event {
+    @apply font-mono text-sm;
+  }
+  
+  .console-event-input {
+    @apply text-console-input;
+  }
+  
+  .console-event-output {
+    @apply text-console-text;
+  }
+  
+  .console-event-error {
+    @apply text-console-error;
+  }
+  
+  .console-event-system {
+    @apply text-console-system;
+  }
+  
+  .console-event-state {
+    @apply text-console-state;
+  }
+  
+  .console-event-breakpoint {
+    @apply text-console-breakpoint;
+  }
+  
+  .console-event-exception {
+    @apply text-console-exception;
+  }
+  
+  .console-event-terminated {
+    @apply text-console-terminated;
+  }
+  
+  .tool-call-message {
+    @apply bg-gray-50 border-l-4 border-blue-500 p-3 mb-2 rounded-r-md transition-all duration-300;
+  }
+  
+  .tool-call-started {
+    @apply bg-yellow-50 border-l-yellow-500 text-yellow-800;
+  }
+  
+  .tool-call-completed {
+    @apply bg-green-50 border-l-green-500 text-green-800;
+  }
+  
+  .tool-call-failed {
+    @apply bg-red-50 border-l-red-500 text-red-800;
+  }
+  
+  .tool-call-error {
+    @apply bg-red-50 border-l-red-500 text-red-800;
+  }
+  
+  .tool-call-update {
+    @apply bg-blue-50 border-l-blue-500 text-blue-800;
+  }
+} 

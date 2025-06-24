@@ -22,7 +22,7 @@ class StepTool(BaseTool):
     
     @property
     def description(self) -> str:
-        return "Step through code execution using different stepping modes: step_over (execute current line and stop at next), step_into (enter function calls), step_out (exit current function), or continue_execution (run until next breakpoint)"
+        return "Step through code execution using different stepping modes: step_over (execute current line and stop at next), step_into (enter function calls), step_out (exit current function)"
     
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -31,7 +31,7 @@ class StepTool(BaseTool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["step_over", "step_into", "step_out", "continue_execution"],
+                    "enum": ["step_over", "step_into", "step_out"],
                     "description": "The type of stepping action to perform"
                 }
             },
@@ -42,36 +42,35 @@ class StepTool(BaseTool):
         """Execute stepping operation based on action type."""
         try:
             self.validate_parameters(**kwargs)
-            
             action = kwargs["action"]
-            
-            # Check if debugger is in a state where we can step
+
+            # Check if debugger is attached for all actions
             if not self.debugger.is_attached():
                 return ToolResult(
                     success=False,
                     data=None,
-                    error="Cannot step - debugger is not attached to a process",
+                    error="Cannot perform action - debugger is not attached to a process",
                     metadata={"action": action, "state": self.debugger.get_state().value}
                 )
-            
-            # For stepping actions, we need to be paused
-            if action in ["step_over", "step_into", "step_out"] and self.debugger.get_state() != DebuggerState.PAUSED:
+
+            state = self.debugger.get_state()
+
+            # Define required state for each action
+            action_state_requirements = {
+                "step_over": DebuggerState.PAUSED,
+                "step_into": DebuggerState.PAUSED,
+                "step_out": DebuggerState.PAUSED,
+            }
+
+            required_state = action_state_requirements.get(action)
+            if required_state and state != required_state:
                 return ToolResult(
                     success=False,
                     data=None,
-                    error="Cannot step - debugger is not paused",
-                    metadata={"action": action, "state": self.debugger.get_state().value}
+                    error=f"Cannot {action.replace('_', ' ')} - debugger is not {required_state.value}",
+                    metadata={"action": action, "state": state.value}
                 )
-            
-            # For continue action, we need to be paused
-            if action == "continue_execution" and self.debugger.get_state() != DebuggerState.PAUSED:
-                return ToolResult(
-                    success=False,
-                    data=None,
-                    error="Cannot continue - debugger is not paused",
-                    metadata={"action": action, "state": self.debugger.get_state().value}
-                )
-            
+
             # Execute the appropriate stepping action
             if action == "step_over":
                 success = self.debugger.step_over()
@@ -79,8 +78,6 @@ class StepTool(BaseTool):
                 success = self.debugger.step_into()
             elif action == "step_out":
                 success = self.debugger.step_out()
-            elif action == "continue_execution":
-                success = self.debugger.continue_execution()
             else:
                 return ToolResult(
                     success=False,
@@ -88,7 +85,7 @@ class StepTool(BaseTool):
                     error=f"Unknown stepping action: {action}",
                     metadata={"action": action}
                 )
-            
+
             if success:
                 return ToolResult(
                     success=True,
@@ -108,7 +105,7 @@ class StepTool(BaseTool):
                     error=f"Failed to execute {action}",
                     metadata={"action": action}
                 )
-            
+
         except DebuggerError as e:
             return ToolResult(
                 success=False,

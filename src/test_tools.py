@@ -16,6 +16,7 @@ from tools.breakpoint_tool import SetBreakpointTool, RemoveBreakpointTool
 from tools.variable_tool import GetVariablesTool
 from tools.stack_tool import GetStackTraceTool, GetCurrentFrameTool
 from tools.step_tool import StepTool
+from tools.execution_control_tool import ExecutionControlTool
 from debugger.factory import DebuggerFactory
 from debugger.base import DebuggerEventType, DebuggerEvent
 
@@ -63,6 +64,7 @@ def test_debugger_tools():
     get_stack_tool = GetStackTraceTool(debugger)
     get_current_frame_tool = GetCurrentFrameTool(debugger)
     step_tool = StepTool(debugger)
+    execution_control_tool = ExecutionControlTool(debugger)
     
     try:
         # Save current working directory
@@ -167,7 +169,7 @@ def test_debugger_tools():
                 
                 # Now continue execution
                 print(f"{Fore.CYAN}[CMD] Continuing execution...{Style.RESET_ALL}")
-                continue_result = step_tool.execute(action="continue_execution")
+                continue_result = execution_control_tool.execute(action="continue_execution")
                 if not continue_result.success:
                     print(f"{Fore.CYAN}[CMD] Continue execution failed: {continue_result.error}{Style.RESET_ALL}")
                     return

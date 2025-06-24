@@ -1,6 +1,7 @@
 """OpenAI completion handler for AI-powered debugging."""
 
 import json
+import logging
 from typing import List, Dict, Any, Optional, Callable
 from openai import OpenAI
 
@@ -14,6 +15,7 @@ except ImportError:
     from utils.exceptions import AIError
     from ai.tool_registry import ToolRegistry
 
+logger = logging.getLogger(__name__)
 
 class CompletionHandler:
     """Handles OpenAI completions with tool calling for debugging."""
@@ -48,7 +50,7 @@ Available debugging tools:
 {tool_descriptions}
 
 When a user wants to debug an application:
-1. First launch it using the launch_application tool
+1. First launch it using the launch_application tool.  Only call this tool once.
 2. If a crash occurs, analyze it using analyze_crash and get_stack_trace
 3. If you need to wait for a specific event, use wait_for_event and tell the user what to do next in the app.
 
@@ -67,6 +69,7 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
     def process_message(self, user_message: str) -> str:
         """Process a user message and return AI response."""
         try:
+            logger.info("Received user message: %s", user_message)
             # Add user message to conversation
             self.conversation_history.append({
                 "role": "user",
@@ -74,6 +77,7 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
             })
             
             # Get completion with tool calling
+            logger.debug("Requesting completion from OpenAI with conversation history of length %d", len(self.conversation_history))
             response = self.client.chat.completions.create(
                 model=config.openai_model,
                 messages=self.conversation_history,
@@ -86,9 +90,11 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
             
             # Handle tool calls if present
             if message.tool_calls:
+                logger.info("Tool calls detected in AI response. Handling tool calls.")
                 return self._handle_tool_calls(message)
             else:
                 # Regular text response
+                logger.info("No tool calls in AI response. Returning assistant message.")
                 self.conversation_history.append({
                     "role": "assistant",
                     "content": message.content
@@ -96,10 +102,12 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 return message.content
                 
         except Exception as e:
+            logger.error("Error processing message: %s", str(e), exc_info=True)
             raise AIError(f"Error processing message: {str(e)}")
     
     def _handle_tool_calls(self, message) -> str:
         """Handle tool calls from the AI."""
+        logger.info("Handling tool calls: %s", [tc.function.name for tc in message.tool_calls])
         # Add assistant message with tool calls
         self.conversation_history.append({
             "role": "assistant",
@@ -121,6 +129,7 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
         tool_results = []
         for tool_call in message.tool_calls:
             try:
+                logger.debug("Parsing arguments for tool '%s'", tool_call.function.name)
                 # Parse tool arguments
                 args = json.loads(tool_call.function.arguments)
                 
@@ -133,7 +142,7 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                         "tool_call_id": tool_call.id
                     })
                 
-                # Execute tool
+                logger.info("Executing tool: %s with arguments: %s", tool_call.function.name, args)
                 result = self.tool_registry.execute_tool(
                     tool_call.function.name,
                     **args
@@ -142,8 +151,10 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 # Format result for AI
                 if result.success:
                     tool_output = json.dumps(result.data, indent=2)
+                    logger.info("Tool '%s' executed successfully.", tool_call.function.name)
                 else:
                     tool_output = f"Error: {result.error}"
+                    logger.warning("Tool '%s' execution failed: %s", tool_call.function.name, result.error)
                 
                 # Notify callback about tool call completion
                 if self.tool_call_callback:
@@ -162,6 +173,7 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 
             except Exception as e:
                 error_msg = f"Error executing tool: {str(e)}"
+                logger.error("Exception during tool '%s' execution: %s", tool_call.function.name, str(e), exc_info=True)
                 
                 # Notify callback about tool call error
                 if self.tool_call_callback:
@@ -179,10 +191,12 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 })
         
         # Add tool results to conversation
+        logger.debug("Adding tool results to conversation history.")
         self.conversation_history.extend(tool_results)
         
         # Get follow-up response from AI
         try:
+            logger.info("Requesting follow-up response from AI after tool execution.")
             follow_up = self.client.chat.completions.create(
                 model=config.openai_model,
                 messages=self.conversation_history,
@@ -195,8 +209,10 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
             
             # Check for additional tool calls
             if follow_up_message.tool_calls:
+                logger.info("Additional tool calls detected in follow-up. Recursing.")
                 return self._handle_tool_calls(follow_up_message)
             else:
+                logger.info("No additional tool calls. Returning follow-up assistant message.")
                 self.conversation_history.append({
                     "role": "assistant",
                     "content": follow_up_message.content
@@ -204,6 +220,7 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 return follow_up_message.content
                 
         except Exception as e:
+            logger.error("Error getting follow-up after tool execution: %s", str(e), exc_info=True)
             return f"Tool execution completed, but error getting follow-up: {str(e)}"
     
     def get_conversation_history(self) -> List[Dict[str, Any]]:

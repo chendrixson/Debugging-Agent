@@ -85,11 +85,14 @@ class WindowsDebugger(BaseDebugger):
         
         # use the inject_break.exe helper to break into the debugger.  Launch that utility and pass it the PID of the debugger process
         inject_break_path = os.path.join(os.path.dirname(__file__), "..","..","..","bin","inject_break.exe")
-        subprocess.Popen([inject_break_path, str(self.cdb_process.pid)])
+        subprocess.Popen([inject_break_path, str(self.target_pid)])
 
-        # sleep for 1 second
+        # sleep for 1 seconds
         time.sleep(1)
 
+    def break_into(self):
+        """Public method to break into the debugged process (pause execution if running)."""
+        self._break_into_debugger()
 
     def _send_cdb_command(self, command: str):
         """Queue a command to be sent to CDB by the processing thread."""
@@ -118,6 +121,11 @@ class WindowsDebugger(BaseDebugger):
             
             self.cdb_process.stdin.write(command + '\n')
             self.cdb_process.stdin.flush()
+
+            # If the command was a g, set the state to running
+            if command == "g":
+                self._set_state(DebuggerState.RUNNING)
+                
         except Exception as e:
             error_msg = f"Error sending command: {e}"
             self._fire_event(DebuggerEventType.ERROR, error_msg)
@@ -170,33 +178,44 @@ class WindowsDebugger(BaseDebugger):
         # Make the pipe non-blocking
         outpipe = self.cdb_process.stdout.fileno()
         os.set_blocking(outpipe, False)
-        
+        ready_to_send_command = False
+
         while self.cdb_process and self.cdb_process.poll() is None:
             try:
-                # Process any queued commands first
-                try:
-                    while True:
+                # Process a command, one at a time, assuming we've got a prompt which sets the ready_to_send_command flag
+                if ready_to_send_command:
+                    try:
                         command = self.cdb_command_queue.get_nowait()
                         self._send_cdb_command_direct(command)
-                except Empty:
-                    pass
+                        ready_to_send_command = False
+                    except Empty:
+                        pass
 
                 # Read data character by character with timeout
                 line = self._read_cdb_output_with_timeout(0.1)
-                
+               
                 if line:
                     self.cdb_output_queue.put(line)
                     self._last_output = line
-                    
-                    # Fire output event
+
+                    # Fire output event for the line
                     self._fire_event(DebuggerEventType.OUTPUT, line)
-                    
-                    # Check for CDB readiness
+
+                    # Check for the prompt, which indicates CDB readiness, and that we're ready to send a command 
                     # Use regex to check for strings like "0:004>"
-                    if not self._cdb_ready and re.search(r'([0-9]+):([0-9]+)>', line):
-                        self._cdb_ready = True
-                        self._fire_event(DebuggerEventType.SYSTEM, "CDB debugger ready")
-                    
+                    if re.search(r'([0-9]+):([0-9]+)>', line):
+                        # If we're not ready, set the ready flag and fire the ready event
+                        if not self._cdb_ready:
+                            self._cdb_ready = True
+                            self._fire_event(DebuggerEventType.SYSTEM, "CDB debugger ready")
+
+                        # Set the state to paused if we're in the running state
+                        if self.state == DebuggerState.RUNNING:
+                            self._set_state(DebuggerState.PAUSED)
+
+                        # At a command prompt, so we're paused, and ready to send any queued commands
+                        ready_to_send_command = True
+
                     # Check for process termination
                     if 'quit:' in line.lower() or 'terminated' in line.lower():
                         self._set_state(DebuggerState.TERMINATED)
@@ -220,14 +239,22 @@ class WindowsDebugger(BaseDebugger):
 
                         # Send a k1 command to get the current source line
                         self._send_cdb_command_direct("k1")
-                        header_line = self.cdb_process.stdout.readline().rstrip('\n\r')
+
+                        # Read the header line, which contains the source line info.  Sometimes there's some extra empty lines
+                        header_line = ""
+                        for i in range(10):
+                            header_line = self.cdb_process.stdout.readline().rstrip('\n\r')
+                            if "Child-SP" in header_line:
+                                break
+
                         self._fire_event(DebuggerEventType.OUTPUT, header_line)
 
                         source_line = self.cdb_process.stdout.readline().rstrip('\n\r')
                         self._fire_event(DebuggerEventType.OUTPUT, source_line)
 
-                        # Wait for CDB prompt before completing breakpoint processing
+                        # Wait for CDB prompt before completing breakpoint processing, and set the ready_to_send_command flag
                         self._wait_for_cdb_prompt()
+                        ready_to_send_command = True
 
                         # Parse the source line to get the frame info
                         frame = self._parse_frame_from_line(source_line)
@@ -356,9 +383,12 @@ class WindowsDebugger(BaseDebugger):
             # Set the debugger into source mode
             self._send_cdb_command("l+t")
 
+            # Continue execution
+            self._send_cdb_command("g")
+
             # Give CDB a little time to process commands
             time.sleep(1)
-            
+
             return self.target_pid
             
         except Exception as e:
@@ -374,7 +404,7 @@ class WindowsDebugger(BaseDebugger):
                 current_state = self.get_state()
                 if current_state != DebuggerState.PAUSED:
                     # Use break_into function to pause the process
-                    self.break_into()
+                    self._break_into_debugger()
 
                 # Send detach command to CDB
                 self._send_cdb_command("qd")  # Quit and detach
@@ -488,7 +518,8 @@ class WindowsDebugger(BaseDebugger):
         try:
             # Make sure the debugger is in the paused state, and save off the current state to restore it later
             current_state = self.state
-            self._break_into_debugger()
+            if self.state == DebuggerState.RUNNING:
+                self._break_into_debugger()
 
             # Generate breakpoint ID
             bp_id = self._generate_breakpoint_id()
@@ -537,9 +568,10 @@ class WindowsDebugger(BaseDebugger):
             )
             self.breakpoints[bp_id] = bp_info
             
-            # Restore the state
+            # Restore the state if we were running, and wait for the command to get sent before returning
             if current_state == DebuggerState.RUNNING:
                 self._send_cdb_command("g")
+                self._wait_for_command_queue_empty()
 
             return bp_id
             
@@ -692,12 +724,11 @@ class WindowsDebugger(BaseDebugger):
                     'data': event.data
                 })
             
-            # Register handler for relevant event types
+            # Register handler for relevant event types.  Don't include STATE_CHANGE, as those happen during the command queue processing
             event_types = [
                 DebuggerEventType.BREAKPOINT_HIT,
                 DebuggerEventType.EXCEPTION,
-                DebuggerEventType.PROCESS_TERMINATED,
-                DebuggerEventType.STATE_CHANGE
+                DebuggerEventType.PROCESS_TERMINATED
             ]
             
             for event_type in event_types:
@@ -812,15 +843,18 @@ class WindowsDebugger(BaseDebugger):
         if not self._cdb_ready:
             raise DebuggerError("CDB failed to become ready within timeout")
     
-    def _parse_frame_from_line(self, line: str) -> Optional[StackFrame]:
-        """Parse a stack frame from a CDB output line.
+    def _wait_for_command_queue_empty(self, timeout: float = 10.0) -> bool:
+        """Wait until the command queue is empty, up to the specified timeout."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self.cdb_command_queue.empty():
+                return True
+            time.sleep(0.1)  # Short sleep to avoid busy waiting
         
-        Args:
-            line: CDB output line containing stack frame information
-            
-        Returns:
-            StackFrame object if parsing successful, None otherwise
-        """
+        return False
+    
+    def _parse_frame_from_line(self, line: str) -> Optional[StackFrame]:
+        """Parse a stack frame from a CDB output line."""
         # Parse stack frame, which looks like this:
         # 000000d2`a29ff4a0 00007ff7`78522a5f     simple_console!runTestMode+0x80 [D:\Source\Debug-Agent\test_apps\simple_console\simple_console.cpp @ 74]
         # Use a regex to pull out the function name, file path, line number, and address

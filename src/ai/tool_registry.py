@@ -7,10 +7,18 @@ try:
     from src.tools.base_tool import BaseTool
     from src.tools.attach_tool import LaunchApplicationTool, AttachToProcessTool
     from src.tools.stack_tool import AnalyzeCrashTool, GetStackTraceTool, GetCurrentFrameTool, WaitForEventTool
+    from src.tools.execution_control_tool import ExecutionControlTool
+    from src.tools.step_tool import StepTool
+    from src.tools.breakpoint_tool import SetBreakpointTool, RemoveBreakpointTool
+    from src.tools.variable_tool import GetVariablesTool
 except ImportError:
     from tools.base_tool import BaseTool
     from tools.attach_tool import LaunchApplicationTool, AttachToProcessTool
     from tools.stack_tool import AnalyzeCrashTool, GetStackTraceTool, GetCurrentFrameTool, WaitForEventTool
+    from tools.execution_control_tool import ExecutionControlTool
+    from tools.step_tool import StepTool
+    from tools.breakpoint_tool import SetBreakpointTool, RemoveBreakpointTool
+    from tools.variable_tool import GetVariablesTool
 
 
 class ToolRegistry:
@@ -29,7 +37,12 @@ class ToolRegistry:
             AnalyzeCrashTool(self.debugger),
             GetStackTraceTool(self.debugger),
             GetCurrentFrameTool(self.debugger),
-            WaitForEventTool(self.debugger)
+            WaitForEventTool(self.debugger),
+            ExecutionControlTool(self.debugger),
+            StepTool(self.debugger),
+            SetBreakpointTool(self.debugger),
+            RemoveBreakpointTool(self.debugger),
+            GetVariablesTool(self.debugger)
         ]
         
         for tool in default_tools:
