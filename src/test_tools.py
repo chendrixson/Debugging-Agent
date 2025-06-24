@@ -14,7 +14,8 @@ from tools.attach_tool import LaunchApplicationTool, AttachToProcessTool
 from tools.stack_tool import AnalyzeCrashTool, WaitForEventTool
 from tools.breakpoint_tool import SetBreakpointTool, RemoveBreakpointTool
 from tools.variable_tool import GetVariablesTool
-from tools.stack_tool import GetStackTraceTool
+from tools.stack_tool import GetStackTraceTool, GetCurrentFrameTool
+from tools.step_tool import StepTool
 from debugger.factory import DebuggerFactory
 from debugger.base import DebuggerEventType, DebuggerEvent
 
@@ -60,6 +61,8 @@ def test_debugger_tools():
     remove_bp_tool = RemoveBreakpointTool(debugger)
     get_vars_tool = GetVariablesTool(debugger)
     get_stack_tool = GetStackTraceTool(debugger)
+    get_current_frame_tool = GetCurrentFrameTool(debugger)
+    step_tool = StepTool(debugger)
     
     try:
         # Save current working directory
@@ -122,6 +125,61 @@ def test_debugger_tools():
                         print(f"{Fore.CYAN}[CMD] Variable: {var_name} = {var_value}{Style.RESET_ALL}")
                 else:
                     print(f"{Fore.CYAN}[CMD] Failed to get variables: {vars_result.error}{Style.RESET_ALL}")
+                
+                # Get current frame before step over
+                print(f"{Fore.CYAN}[CMD] Getting current frame before step over...{Style.RESET_ALL}")
+                before_frame_result = get_current_frame_tool.execute()
+                if not before_frame_result.success:
+                    print(f"{Fore.CYAN}[CMD] Failed to get frame before step: {before_frame_result.error}{Style.RESET_ALL}")
+                    return
+                
+                before_frame = before_frame_result.data
+                before_line = before_frame['line']
+                print(f"{Fore.CYAN}[CMD] Before step: {before_frame['function']} at line {before_line} in {before_frame['file']}{Style.RESET_ALL}")
+
+                # Test stepping functionality
+                print(f"{Fore.CYAN}[CMD] Testing step over functionality...{Style.RESET_ALL}")
+
+                step_result = step_tool.execute(action="step_over")
+                if not step_result.success:
+                    print(f"{Fore.CYAN}[CMD] Step over failed: {step_result.error}{Style.RESET_ALL}")
+                    return
+                
+                print(f"{Fore.CYAN}[CMD] Step over successful{Style.RESET_ALL}")
+                
+                # Get current frame after step over
+                print(f"{Fore.CYAN}[CMD] Getting current frame after step over...{Style.RESET_ALL}")
+                after_frame_result = get_current_frame_tool.execute()
+                if not after_frame_result.success:
+                    print(f"{Fore.CYAN}[CMD] Failed to get frame after step: {after_frame_result.error}{Style.RESET_ALL}")
+                    return
+                
+                after_frame = after_frame_result.data
+                after_line = after_frame['line']
+                print(f"{Fore.CYAN}[CMD] After step: {after_frame['function']} at line {after_line} in {after_frame['file']}{Style.RESET_ALL}")
+                
+                # Verify line number incremented by one
+                line_diff = int(after_line) - int(before_line)
+                if line_diff == 1:
+                    print(f"{Fore.CYAN}[CMD] ✓ Line number correctly incremented by 1 (from {before_line} to {after_line}){Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.CYAN}[CMD] ⚠ Line number changed by {line_diff} (from {before_line} to {after_line}){Style.RESET_ALL}")
+                
+                # Now continue execution
+                print(f"{Fore.CYAN}[CMD] Continuing execution...{Style.RESET_ALL}")
+                continue_result = step_tool.execute(action="continue_execution")
+                if not continue_result.success:
+                    print(f"{Fore.CYAN}[CMD] Continue execution failed: {continue_result.error}{Style.RESET_ALL}")
+                    return
+                
+                # Then we should get a crash event
+                print(f"{Fore.CYAN}[CMD] Waiting for crash event...{Style.RESET_ALL}")
+                crash_result = wait_tool.execute(timeout=10)
+                if crash_result.success and crash_result.data['event']['type'] == DebuggerEventType.EXCEPTION.value:
+                    print(f"{Fore.CYAN}[CMD] Crash event occurred: {crash_result.data['event']['content']}{Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.CYAN}[CMD] No crash event occurred: {crash_result.error}{Style.RESET_ALL}")
+
             else:
                 print(f"{Fore.CYAN}[CMD] No debug event occurred: {event_result.error}{Style.RESET_ALL}")
             

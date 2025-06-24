@@ -169,6 +169,81 @@ class GetStackTraceTool(BaseTool):
         return datetime.datetime.now().isoformat()
 
 
+class GetCurrentFrameTool(BaseTool):
+    """Tool to get the current frame (top of stack)."""
+    
+    @property
+    def name(self) -> str:
+        return "get_current_frame"
+    
+    @property
+    def description(self) -> str:
+        return "Get the current frame (top of stack) of the debugged process when paused or crashed"
+    
+    @property
+    def parameters(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    
+    def execute(self, **kwargs) -> ToolResult:
+        """Execute current frame retrieval."""
+        try:
+            # Check if debugger is in a state where we can get current frame
+            state = self.debugger.get_state()
+            if state not in [DebuggerState.PAUSED, DebuggerState.CRASHED]:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error=f"Cannot get current frame - process is in state: {state.value}",
+                    metadata={"action": "get_current_frame", "state": state.value}
+                )
+            
+            # Get current frame
+            current_frame = self.debugger.get_current_frame()
+            
+            if current_frame:
+                formatted_frame = {
+                    "function": current_frame.function_name,
+                    "file": current_frame.file_path,
+                    "line": current_frame.line_number,
+                    "module": current_frame.module_name,
+                    "address": current_frame.address,
+                }
+                
+                return ToolResult(
+                    success=True,
+                    data=formatted_frame,
+                    metadata={
+                        "action": "get_current_frame",
+                        "timestamp": self._get_timestamp(),
+                        "state": state.value
+                    }
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data=None,
+                    error="Could not retrieve current frame information",
+                    metadata={"action": "get_current_frame"}
+                )
+            
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                data=None,
+                error=f"Error getting current frame: {str(e)}",
+                metadata={"action": "get_current_frame"}
+            )
+    
+    def _get_timestamp(self) -> str:
+        """Get current timestamp as string."""
+        import datetime
+        return datetime.datetime.now().isoformat()
+
+
 class WaitForEventTool(BaseTool):
     """Tool to wait for debug events (crashes, breakpoints, etc.)."""
     

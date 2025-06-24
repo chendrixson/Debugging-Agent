@@ -20,7 +20,8 @@ class LaunchApplicationTool(BaseTool):
     
     @property
     def description(self) -> str:
-        return "Launch an application under the debugger to monitor for crashes and analyze behavior"
+        return ( "Launch an application under the debugger to monitor for crashes and analyze behavior. "
+                 "No need to attach to the process after launching.  Process is in running state after launching." )
     
     @property
     def parameters(self) -> Dict[str, Any]:

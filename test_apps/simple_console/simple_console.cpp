@@ -72,6 +72,11 @@ void runTestMode()
 
     // Test should be attached to the below function, then will walk through it
     calculateStatistics(numbers, size);
+
+    Sleep(2000);
+    
+    // And then crash
+    nullPointerDereference();
 }
 
 int main(int argc, char* argv[]) {

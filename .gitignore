@@ -8,6 +8,7 @@ __pycache__/
 
 #Visual Studio
 bin/
+x64/
 *.filters
 *.user
 .vs/

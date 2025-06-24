@@ -1,7 +1,7 @@
 """OpenAI completion handler for AI-powered debugging."""
 
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from openai import OpenAI
 
 # Handle imports for both package and direct execution
@@ -26,11 +26,17 @@ class CompletionHandler:
             base_url=config.openai_base_url
         )
         self.conversation_history: List[Dict[str, Any]] = []
+        self.tool_call_callback: Optional[Callable] = None
         self._initialize_system_prompt()
+    
+    def set_tool_call_callback(self, callback: Callable):
+        """Set a callback function to be called when tools are executed."""
+        self.tool_call_callback = callback
     
     def _initialize_system_prompt(self):
         """Initialize the system prompt for debugging assistance."""
-        system_prompt = """You are an expert debugging assistant with access to debugging tools. Your goal is to help users debug applications by:
+        system_prompt = """
+You are an expert debugging assistant with access to debugging tools. Your goal is to help users debug applications by:
 
 1. Launching applications under the debugger
 2. Monitoring for crashes and exceptions
@@ -43,9 +49,8 @@ Available debugging tools:
 
 When a user wants to debug an application:
 1. First launch it using the launch_application tool
-2. Wait for events using wait_for_event
-3. If a crash occurs, analyze it using analyze_crash and get_stack_trace
-4. Provide detailed analysis and actionable suggestions
+2. If a crash occurs, analyze it using analyze_crash and get_stack_trace
+3. If you need to wait for a specific event, use wait_for_event and tell the user what to do next in the app.
 
 Always explain what you're doing and why. Be thorough in your analysis and provide concrete steps for resolution."""
 
@@ -119,6 +124,15 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 # Parse tool arguments
                 args = json.loads(tool_call.function.arguments)
                 
+                # Notify callback about tool call start
+                if self.tool_call_callback:
+                    self.tool_call_callback({
+                        "type": "tool_call_start",
+                        "tool_name": tool_call.function.name,
+                        "arguments": args,
+                        "tool_call_id": tool_call.id
+                    })
+                
                 # Execute tool
                 result = self.tool_registry.execute_tool(
                     tool_call.function.name,
@@ -131,6 +145,15 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 else:
                     tool_output = f"Error: {result.error}"
                 
+                # Notify callback about tool call completion
+                if self.tool_call_callback:
+                    self.tool_call_callback({
+                        "type": "tool_call_complete",
+                        "tool_name": tool_call.function.name,
+                        "result": result,
+                        "tool_call_id": tool_call.id
+                    })
+                
                 tool_results.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
@@ -138,10 +161,21 @@ Always explain what you're doing and why. Be thorough in your analysis and provi
                 })
                 
             except Exception as e:
+                error_msg = f"Error executing tool: {str(e)}"
+                
+                # Notify callback about tool call error
+                if self.tool_call_callback:
+                    self.tool_call_callback({
+                        "type": "tool_call_error",
+                        "tool_name": tool_call.function.name,
+                        "error": str(e),
+                        "tool_call_id": tool_call.id
+                    })
+                
                 tool_results.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
-                    "content": f"Error executing tool: {str(e)}"
+                    "content": error_msg
                 })
         
         # Add tool results to conversation

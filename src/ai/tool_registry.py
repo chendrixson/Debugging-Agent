@@ -6,11 +6,11 @@ from typing import Dict, List, Any, Optional
 try:
     from src.tools.base_tool import BaseTool
     from src.tools.attach_tool import LaunchApplicationTool, AttachToProcessTool
-    from src.tools.stack_tool import AnalyzeCrashTool, GetStackTraceTool, WaitForEventTool
+    from src.tools.stack_tool import AnalyzeCrashTool, GetStackTraceTool, GetCurrentFrameTool, WaitForEventTool
 except ImportError:
     from tools.base_tool import BaseTool
     from tools.attach_tool import LaunchApplicationTool, AttachToProcessTool
-    from tools.stack_tool import AnalyzeCrashTool, GetStackTraceTool, WaitForEventTool
+    from tools.stack_tool import AnalyzeCrashTool, GetStackTraceTool, GetCurrentFrameTool, WaitForEventTool
 
 
 class ToolRegistry:
@@ -28,6 +28,7 @@ class ToolRegistry:
             AttachToProcessTool(self.debugger),
             AnalyzeCrashTool(self.debugger),
             GetStackTraceTool(self.debugger),
+            GetCurrentFrameTool(self.debugger),
             WaitForEventTool(self.debugger)
         ]
         
